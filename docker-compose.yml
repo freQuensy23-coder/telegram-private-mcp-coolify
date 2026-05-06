@@ -1,0 +1,22 @@
+services:
+  telegram-private-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN}
+      TGCLI_STORE: /data
+      PORT: 3000
+    volumes:
+      - telegram_private_mcp_data:/data
+    ports:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  telegram_private_mcp_data:
+
