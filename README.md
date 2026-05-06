@@ -1,0 +1,33 @@
+# telegram-private-mcp-coolify
+
+Remote HTTP MCP wrapper for `@kfastov/tgcli`.
+
+The public `/mcp` endpoint is protected by:
+
+```http
+Authorization: Bearer <MCP_BEARER_TOKEN>
+```
+
+Telegram data is not baked into the image. The container expects a persistent
+store mounted at `/data` with:
+
+- `/data/config.json`
+- `/data/session.json`
+- `/data/messages.db` after sync starts
+
+## Client Setup
+
+Codex:
+
+```bash
+export TELEGRAM_PRIVATE_MCP_TOKEN="..."
+codex mcp add telegram-private --url https://YOUR-COOLIFY-URL/mcp --bearer-token-env-var TELEGRAM_PRIVATE_MCP_TOKEN
+```
+
+Claude Code:
+
+```bash
+claude mcp add --transport http telegram-private https://YOUR-COOLIFY-URL/mcp \
+  --header "Authorization: Bearer ..."
+```
+

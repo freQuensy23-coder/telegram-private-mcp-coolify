@@ -1,0 +1,14 @@
+{
+  "name": "telegram-private-mcp-coolify",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@kfastov/tgcli": "2.1.0"
+  }
+}
+
