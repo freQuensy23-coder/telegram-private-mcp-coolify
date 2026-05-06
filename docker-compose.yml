@@ -11,6 +11,11 @@ services:
       - telegram_private_mcp_data:/data
     ports:
       - "3000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.telegram-private-mcp.rule=Host(`ycckcoc4gk0gs8ow484408ss.167.235.18.16.sslip.io`)"
+      - "traefik.http.routers.telegram-private-mcp.entrypoints=http"
+      - "traefik.http.services.telegram-private-mcp.loadbalancer.server.port=3000"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -19,4 +24,3 @@ services:
 
 volumes:
   telegram_private_mcp_data:
-
