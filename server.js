@@ -1,7 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 const port = Number(process.env.PORT || 3000);
 const storeDir = process.env.TGCLI_STORE || "/data";
@@ -18,6 +18,58 @@ let lastStartAttempt = 0;
 
 function hasTelegramStore() {
   return fs.existsSync(configPath) && fs.existsSync(sessionPath);
+}
+
+function ensureTelegramStore() {
+  if (hasTelegramStore()) return true;
+
+  const apiId = process.env.TELEGRAM_API_ID || process.env.TG_API_ID;
+  const apiHash = process.env.TELEGRAM_API_HASH || process.env.TG_API_HASH;
+  const phoneNumber = process.env.TELEGRAM_PHONE || process.env.TG_PHONE || "";
+  const sessionString = process.env.TELEGRAM_SESSION_STRING || process.env.TG_SESSION_STRING;
+
+  if (!apiId || !apiHash || !sessionString) return false;
+
+  fs.mkdirSync(storeDir, { recursive: true });
+  fs.writeFileSync(
+    configPath,
+    `${JSON.stringify(
+      {
+        apiId: String(apiId),
+        apiHash: String(apiHash),
+        phoneNumber: String(phoneNumber),
+        mcp: { enabled: true, host: tgcliHost, port: tgcliPort },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  const importScript = `
+    import { TelegramClient } from '@mtcute/node';
+    const client = new TelegramClient({
+      apiId: Number(process.env.TELEGRAM_API_ID || process.env.TG_API_ID),
+      apiHash: process.env.TELEGRAM_API_HASH || process.env.TG_API_HASH,
+      storage: process.env.TGCLI_SESSION_PATH,
+      disableUpdates: true,
+    });
+    await client.importSession(process.env.TELEGRAM_SESSION_STRING || process.env.TG_SESSION_STRING, true);
+    await client.destroy();
+  `;
+
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", importScript], {
+    cwd: process.cwd(),
+    env: { ...process.env, TGCLI_SESSION_PATH: sessionPath },
+    stdio: ["ignore", "inherit", "inherit"],
+  });
+
+  if (result.status !== 0) {
+    console.error(`[proxy] failed to import Telegram session string, exit=${result.status}`);
+    return false;
+  }
+
+  return hasTelegramStore();
 }
 
 function ensureTgcliMcpConfig() {
@@ -44,7 +96,7 @@ function ensureTgcliMcpConfig() {
 }
 
 function ensureTgcli() {
-  if (child || !hasTelegramStore()) return;
+  if (child || !ensureTelegramStore()) return;
 
   const now = Date.now();
   if (now - lastStartAttempt < 5000) return;
@@ -92,7 +144,7 @@ function requireBearer(req, res) {
 }
 
 function proxyToTgcli(req, res) {
-  if (!hasTelegramStore()) {
+  if (!ensureTelegramStore()) {
     res.writeHead(503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "telegram session is not installed yet" }));
     return;
