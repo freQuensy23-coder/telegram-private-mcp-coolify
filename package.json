@@ -8,7 +8,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@kfastov/tgcli": "2.1.0"
+    "@kfastov/tgcli": "2.1.0",
+    "@mtcute/convert": "^0.29.6"
   }
 }
-

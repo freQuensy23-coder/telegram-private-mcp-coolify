@@ -48,13 +48,28 @@ function ensureTelegramStore() {
 
   const importScript = `
     import { TelegramClient } from '@mtcute/node';
+    import { writeStringSession } from '@mtcute/core/utils.js';
+    import { convertFromTelethonSession, convertFromPyrogramSession } from '@mtcute/convert';
     const client = new TelegramClient({
       apiId: Number(process.env.TELEGRAM_API_ID || process.env.TG_API_ID),
       apiHash: process.env.TELEGRAM_API_HASH || process.env.TG_API_HASH,
       storage: process.env.TGCLI_SESSION_PATH,
       disableUpdates: true,
     });
-    await client.importSession(process.env.TELEGRAM_SESSION_STRING || process.env.TG_SESSION_STRING, true);
+    const session = process.env.TELEGRAM_SESSION_STRING || process.env.TG_SESSION_STRING;
+    try {
+      await client.importSession(session, true);
+    } catch (error) {
+      let imported = false;
+      for (const convert of [convertFromTelethonSession, convertFromPyrogramSession]) {
+        try {
+          await client.importSession(writeStringSession(convert(session)), true);
+          imported = true;
+          break;
+        } catch (_) {}
+      }
+      if (!imported) throw error;
+    }
     await client.destroy();
   `;
 
