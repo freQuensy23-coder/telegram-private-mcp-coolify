@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "@kfastov/tgcli": "2.1.0",
-    "@mtcute/convert": "^0.29.6"
+    "@mtcute/convert": "^0.27.9",
+    "@mtcute/core": "^0.27.9",
+    "@mtcute/node": "^0.27.9"
   }
 }
