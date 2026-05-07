@@ -6,6 +6,8 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ curl \
   && rm -rf /var/lib/apt/lists/*
 
+RUN mkdir -p /data && chmod 700 /data
+
 COPY package*.json ./
 RUN npm install --omit=dev
 
