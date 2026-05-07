@@ -20,12 +20,37 @@ function hasTelegramStore() {
   return fs.existsSync(configPath) && fs.existsSync(sessionPath);
 }
 
+function ensureTgcliMcpConfig() {
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch (error) {
+    console.error(`[proxy] failed to read tgcli config: ${error.message}`);
+    return false;
+  }
+
+  const nextConfig = {
+    ...config,
+    mcp: {
+      ...(config.mcp && typeof config.mcp === "object" ? config.mcp : {}),
+      enabled: true,
+      host: tgcliHost,
+      port: tgcliPort,
+    },
+  };
+
+  fs.writeFileSync(configPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
+  return true;
+}
+
 function ensureTgcli() {
   if (child || !hasTelegramStore()) return;
 
   const now = Date.now();
   if (now - lastStartAttempt < 5000) return;
   lastStartAttempt = now;
+
+  if (!ensureTgcliMcpConfig()) return;
 
   childReady = false;
   child = spawn("./node_modules/.bin/tgcli", ["server"], {
