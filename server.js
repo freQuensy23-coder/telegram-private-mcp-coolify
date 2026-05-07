@@ -110,6 +110,26 @@ function ensureTgcliMcpConfig() {
   return true;
 }
 
+function patchTgcliStartup() {
+  const mcpServerPath = path.join(process.cwd(), "node_modules", "@kfastov", "tgcli", "mcp-server.js");
+  try {
+    let source = fs.readFileSync(mcpServerPath, "utf8");
+    const blockingInit = `await initializeTelegram().catch((error) => {
+  console.error(\`[startup] Telegram initialization failed: \${error?.message ?? error}\`);
+  process.exit(1);
+});`;
+    const backgroundInit = `initializeTelegram().catch((error) => {
+  console.error(\`[startup] Telegram initialization failed: \${error?.message ?? error}\`);
+});`;
+    if (source.includes(blockingInit)) {
+      source = source.replace(blockingInit, backgroundInit);
+      fs.writeFileSync(mcpServerPath, source, "utf8");
+    }
+  } catch (error) {
+    console.error(`[proxy] failed to patch tgcli startup: ${error.message}`);
+  }
+}
+
 function ensureTgcli() {
   if (child || !ensureTelegramStore()) return;
 
@@ -118,6 +138,7 @@ function ensureTgcli() {
   lastStartAttempt = now;
 
   if (!ensureTgcliMcpConfig()) return;
+  patchTgcliStartup();
 
   childReady = false;
   child = spawn("./node_modules/.bin/tgcli", ["server"], {
