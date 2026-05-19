@@ -1,6 +1,12 @@
 # telegram-private-mcp-coolify
 
-Remote HTTP MCP wrapper for `@kfastov/tgcli`.
+Remote HTTPS MCP wrapper for `@kfastov/tgcli`.
+
+Production endpoint:
+
+```text
+https://api.fstr.cc/telegram-private-mcp/mcp
+```
 
 The public `/mcp` endpoint is protected by:
 
@@ -21,13 +27,12 @@ Codex:
 
 ```bash
 export TELEGRAM_PRIVATE_MCP_TOKEN="..."
-codex mcp add telegram-private --url https://YOUR-COOLIFY-URL/mcp --bearer-token-env-var TELEGRAM_PRIVATE_MCP_TOKEN
+codex mcp add telegram-private --url https://api.fstr.cc/telegram-private-mcp/mcp --bearer-token-env-var TELEGRAM_PRIVATE_MCP_TOKEN
 ```
 
 Claude Code:
 
 ```bash
-claude mcp add --transport http telegram-private https://YOUR-COOLIFY-URL/mcp \
+claude mcp add --transport http telegram-private https://api.fstr.cc/telegram-private-mcp/mcp \
   --header "Authorization: Bearer ..."
 ```
-
