@@ -19,7 +19,6 @@ ENV NODE_ENV=production \
     TGCLI_HOST=127.0.0.1 \
     TGCLI_PORT=8080
 
-VOLUME ["/data"]
 EXPOSE 3000
 
 CMD ["node", "server.js"]
