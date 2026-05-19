@@ -8,6 +8,7 @@ const storeDir = process.env.TGCLI_STORE || "/data";
 const tgcliHost = process.env.TGCLI_HOST || "127.0.0.1";
 const tgcliPort = Number(process.env.TGCLI_PORT || 8080);
 const bearerToken = process.env.MCP_BEARER_TOKEN || "";
+const publicPrefix = normalizePrefix(process.env.MCP_PUBLIC_PREFIX || "");
 
 const configPath = path.join(storeDir, "config.json");
 const sessionPath = path.join(storeDir, "session.json");
@@ -15,6 +16,12 @@ const sessionPath = path.join(storeDir, "session.json");
 let child = null;
 let childReady = false;
 let lastStartAttempt = 0;
+
+function normalizePrefix(prefix) {
+  const normalized = prefix.trim().replace(/\/+$/, "");
+  if (!normalized || normalized === "/") return "";
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
+}
 
 function hasTelegramStore() {
   return fs.existsSync(configPath) && fs.existsSync(sessionPath);
@@ -179,7 +186,7 @@ function requireBearer(req, res) {
   return true;
 }
 
-function proxyToTgcli(req, res) {
+function proxyToTgcli(req, res, upstreamPath) {
   if (!ensureTelegramStore()) {
     res.writeHead(503, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "telegram session is not installed yet" }));
@@ -193,7 +200,7 @@ function proxyToTgcli(req, res) {
       host: tgcliHost,
       port: tgcliPort,
       method: req.method,
-      path: req.url,
+      path: upstreamPath,
       headers: {
         ...req.headers,
         host: `${tgcliHost}:${tgcliPort}`,
@@ -229,20 +236,28 @@ function health(res) {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  const healthPaths = new Set(["/", "/healthz"]);
+  const mcpPaths = new Set(["/mcp"]);
+  if (publicPrefix) {
+    healthPaths.add(publicPrefix);
+    healthPaths.add(`${publicPrefix}/`);
+    healthPaths.add(`${publicPrefix}/healthz`);
+    mcpPaths.add(`${publicPrefix}/mcp`);
+  }
 
-  if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/healthz")) {
+  if (req.method === "GET" && healthPaths.has(url.pathname)) {
     health(res);
     return;
   }
 
-  if (url.pathname !== "/mcp") {
+  if (!mcpPaths.has(url.pathname)) {
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "not found" }));
     return;
   }
 
   if (!requireBearer(req, res)) return;
-  proxyToTgcli(req, res);
+  proxyToTgcli(req, res, `/mcp${url.search}`);
 });
 
 setInterval(ensureTgcli, 5000).unref();
