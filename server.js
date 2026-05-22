@@ -177,10 +177,11 @@ function ensureTgcli() {
   });
 }
 
-function unauthorized(res) {
+function unauthorized(req, res) {
+  const base = getBaseUrl(req);
   res.writeHead(401, {
     "Content-Type": "application/json",
-    "WWW-Authenticate": `Bearer resource_metadata="${publicPrefix}/.well-known/oauth-protected-resource"`,
+    "WWW-Authenticate": `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`,
   });
   res.end(JSON.stringify({ error: "unauthorized" }));
 }
@@ -192,7 +193,7 @@ function requireBearer(req, res) {
     return false;
   }
   if (req.headers.authorization !== `Bearer ${bearerToken}`) {
-    unauthorized(res);
+    unauthorized(req, res);
     return false;
   }
   return true;
