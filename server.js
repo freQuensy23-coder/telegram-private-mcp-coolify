@@ -263,7 +263,7 @@ function getMcpResourceUrl(req) {
 }
 
 function getProtectedResourceMetadataUrl(req) {
-  return `${getOrigin(req)}/.well-known/oauth-protected-resource${publicPrefix}/mcp`;
+  return `${getBaseUrl(req)}/.well-known/oauth-protected-resource`;
 }
 
 function oauthMetadata(req, res) {

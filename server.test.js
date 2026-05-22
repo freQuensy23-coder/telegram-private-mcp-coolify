@@ -25,7 +25,7 @@ test("serves RFC well-known metadata paths for a prefixed MCP resource", async (
   assert.equal(unauthorized.status, 401);
   assert.equal(
     unauthorized.headers.get("www-authenticate"),
-    'Bearer resource_metadata="https://api.fstr.cc/.well-known/oauth-protected-resource/telegram-private-mcp/mcp", scope="mcp"',
+    'Bearer resource_metadata="https://api.fstr.cc/telegram-private-mcp/.well-known/oauth-protected-resource", scope="mcp"',
   );
 
   const resourceMetadata = await getJson(
@@ -39,6 +39,13 @@ test("serves RFC well-known metadata paths for a prefixed MCP resource", async (
     scopes_supported: ["mcp"],
     bearer_methods_supported: ["header"],
   });
+
+  const routedResourceMetadata = await getJson(
+    `${app.url}/telegram-private-mcp/.well-known/oauth-protected-resource`,
+    { headers: forwardedHeaders },
+  );
+  assert.equal(routedResourceMetadata.status, 200);
+  assert.deepEqual(routedResourceMetadata.body, resourceMetadata.body);
 
   const authMetadata = await getJson(
     `${app.url}/.well-known/oauth-authorization-server/telegram-private-mcp`,
