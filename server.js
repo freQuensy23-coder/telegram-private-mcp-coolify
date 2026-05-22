@@ -12,6 +12,7 @@ const bearerToken = process.env.MCP_BEARER_TOKEN || "";
 const publicPrefix = normalizePrefix(process.env.MCP_PUBLIC_PREFIX || "");
 const oauthClientId = process.env.OAUTH_CLIENT_ID || "";
 const oauthClientSecret = process.env.OAUTH_CLIENT_SECRET || "";
+const authPassword = process.env.MCP_AUTH_PASSWORD || "";
 
 const configPath = path.join(storeDir, "config.json");
 const sessionPath = path.join(storeDir, "session.json");
@@ -318,7 +319,6 @@ function oauthAuthorize(req, res) {
   const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "S256";
   const responseType = url.searchParams.get("response_type");
   console.log(`[oauth/authorize] client_id=${clientId} redirect_uri=${redirectUri} response_type=${responseType} state=${state?.slice(0,16)}`);
-  console.log(`[oauth/authorize] full url: ${req.url}`);
 
   if (oauthClientId && clientId !== oauthClientId) {
     res.writeHead(400, { "Content-Type": "text/html" });
@@ -331,6 +331,49 @@ function oauthAuthorize(req, res) {
     return;
   }
 
+  if (req.method === "POST") {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      const params = new URLSearchParams(body);
+      const submittedPassword = params.get("password") || "";
+      if (!authPassword || submittedPassword !== authPassword) {
+        res.writeHead(401, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(loginForm(url.search, "Неверный пароль"));
+        return;
+      }
+      issueCode({ codeChallenge, codeChallengeMethod, redirectUri, clientId, state }, res);
+    });
+    return;
+  }
+
+  // GET — show login form
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(loginForm(url.search, ""));
+}
+
+function loginForm(queryString, error) {
+  return `<!DOCTYPE html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>Telegram MCP — вход</title>
+<style>
+  body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #0f0f0f; color: #e0e0e0; }
+  form { background: #1a1a1a; padding: 2rem; border-radius: 12px; width: 320px; box-shadow: 0 4px 24px #0008; }
+  h2 { margin: 0 0 1.5rem; font-size: 1.2rem; }
+  input[type=password] { width: 100%; padding: .6rem .8rem; border-radius: 6px; border: 1px solid #333; background: #111; color: #e0e0e0; font-size: 1rem; box-sizing: border-box; margin-bottom: 1rem; }
+  button { width: 100%; padding: .7rem; border-radius: 6px; border: none; background: #2563eb; color: #fff; font-size: 1rem; cursor: pointer; }
+  button:hover { background: #1d4ed8; }
+  .err { color: #f87171; margin-bottom: .8rem; font-size: .9rem; }
+</style></head>
+<body><form method="POST" action="/oauth/authorize${queryString}">
+  <h2>Telegram MCP</h2>
+  ${error ? `<div class="err">${error}</div>` : ""}
+  <input type="password" name="password" placeholder="Пароль" autofocus autocomplete="current-password">
+  <button type="submit">Войти</button>
+</form></body></html>`;
+}
+
+function issueCode({ codeChallenge, codeChallengeMethod, redirectUri, clientId, state }, res) {
   const code = randomBytes(32).toString("base64url");
   pendingCodes.set(code, {
     codeChallenge,
@@ -339,7 +382,6 @@ function oauthAuthorize(req, res) {
     clientId,
     expiresAt: Date.now() + 300_000,
   });
-
   const redirect = new URL(redirectUri);
   redirect.searchParams.set("code", code);
   if (state) redirect.searchParams.set("state", state);
@@ -380,7 +422,7 @@ function oauthToken(req, res) {
       return;
     }
 
-    if (oauthClientSecret && clientSecret && clientSecret !== oauthClientSecret) {
+    if (oauthClientSecret && clientSecret !== oauthClientSecret) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "invalid_client" }));
       return;
@@ -449,7 +491,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.method === "GET" && authorizePaths.has(url.pathname)) {
+  if ((req.method === "GET" || req.method === "POST") && authorizePaths.has(url.pathname)) {
     oauthAuthorize(req, res);
     return;
   }
