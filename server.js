@@ -261,12 +261,36 @@ function oauthMetadata(req, res) {
       issuer: base,
       authorization_endpoint: `${base}/oauth/authorize`,
       token_endpoint: `${base}/oauth/token`,
+      registration_endpoint: `${base}/oauth/register`,
+      scopes_supported: ["mcp"],
       grant_types_supported: ["authorization_code"],
       response_types_supported: ["code"],
       code_challenge_methods_supported: ["S256"],
-      token_endpoint_auth_methods_supported: ["none", "client_secret_post"],
+      token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
     }),
   );
+}
+
+function oauthRegister(req, res) {
+  let body = "";
+  req.on("data", (chunk) => { body += chunk; });
+  req.on("end", () => {
+    console.log(`[oauth/register] body=${body}`);
+    let parsed = {};
+    try { parsed = JSON.parse(body); } catch (_) {}
+    const redirectUris = parsed.redirect_uris || [];
+    console.log(`[oauth/register] redirect_uris=${JSON.stringify(redirectUris)}`);
+    res.writeHead(201, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      client_id: oauthClientId || "telegram-private-mcp",
+      client_secret: oauthClientSecret || undefined,
+      client_id_issued_at: Math.floor(Date.now() / 1000),
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      redirect_uris: redirectUris,
+      token_endpoint_auth_method: "none",
+    }));
+  });
 }
 
 function oauthProtectedResource(req, res) {
@@ -396,6 +420,7 @@ const server = http.createServer((req, res) => {
   const protectedResourcePaths = new Set(["/.well-known/oauth-protected-resource"]);
   const authorizePaths = new Set(["/oauth/authorize"]);
   const tokenPaths = new Set(["/oauth/token"]);
+  const registerPaths = new Set(["/oauth/register"]);
 
   if (publicPrefix) {
     healthPaths.add(publicPrefix);
@@ -406,6 +431,7 @@ const server = http.createServer((req, res) => {
     protectedResourcePaths.add(`${publicPrefix}/.well-known/oauth-protected-resource`);
     authorizePaths.add(`${publicPrefix}/oauth/authorize`);
     tokenPaths.add(`${publicPrefix}/oauth/token`);
+    registerPaths.add(`${publicPrefix}/oauth/register`);
   }
 
   if (req.method === "GET" && healthPaths.has(url.pathname)) {
@@ -430,6 +456,11 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && tokenPaths.has(url.pathname)) {
     oauthToken(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && registerPaths.has(url.pathname)) {
+    oauthRegister(req, res);
     return;
   }
 
