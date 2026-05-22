@@ -292,6 +292,8 @@ function oauthAuthorize(req, res) {
   const codeChallenge = url.searchParams.get("code_challenge");
   const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "S256";
   const responseType = url.searchParams.get("response_type");
+  console.log(`[oauth/authorize] client_id=${clientId} redirect_uri=${redirectUri} response_type=${responseType} state=${state?.slice(0,16)}`);
+  console.log(`[oauth/authorize] full url: ${req.url}`);
 
   if (oauthClientId && clientId !== oauthClientId) {
     res.writeHead(400, { "Content-Type": "text/html" });
