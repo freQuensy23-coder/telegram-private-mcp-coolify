@@ -543,7 +543,10 @@ const server = http.createServer((req, res) => {
 
   const healthPaths = new Set(["/", "/healthz"]);
   const mcpPaths = new Set(["/mcp"]);
-  const wellKnownPaths = new Set(["/.well-known/oauth-authorization-server"]);
+  const wellKnownPaths = new Set([
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/openid-configuration",
+  ]);
   const protectedResourcePaths = new Set([
     "/.well-known/oauth-protected-resource",
     "/.well-known/oauth-protected-resource/mcp",
@@ -559,6 +562,7 @@ const server = http.createServer((req, res) => {
     mcpPaths.add(`${publicPrefix}/mcp`);
     wellKnownPaths.add(`/.well-known/oauth-authorization-server${publicPrefix}`);
     wellKnownPaths.add(`${publicPrefix}/.well-known/oauth-authorization-server`);
+    wellKnownPaths.add(`${publicPrefix}/.well-known/openid-configuration`);
     protectedResourcePaths.add(`/.well-known/oauth-protected-resource${publicPrefix}/mcp`);
     protectedResourcePaths.add(`${publicPrefix}/.well-known/oauth-protected-resource`);
     authorizePaths.add(`${publicPrefix}/oauth/authorize`);

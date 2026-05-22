@@ -206,6 +206,13 @@ test("supports Coolify path routing when the public MCP endpoint is the prefix",
   assert.equal(authMetadata.body.authorization_endpoint, "https://fstr.cc/mcp/oauth/authorize");
   assert.deepEqual(authMetadata.body.protected_resources, ["https://fstr.cc/mcp"]);
 
+  const openIdMetadata = await getJson(`${app.url}/.well-known/openid-configuration`, {
+    headers: forwardedHeaders,
+  });
+  assert.equal(openIdMetadata.status, 200);
+  assert.equal(openIdMetadata.body.issuer, "https://fstr.cc/mcp");
+  assert.equal(openIdMetadata.body.token_endpoint, "https://fstr.cc/mcp/oauth/token");
+
   const authorizeUrl = new URL(`${app.url}/oauth/authorize`);
   authorizeUrl.search = new URLSearchParams({
     client_id: "telegram-private-mcp",
