@@ -387,6 +387,7 @@ function oauthToken(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  console.log(`[req] ${req.method} ${req.url} | host=${req.headers.host} | x-fwd-host=${req.headers["x-forwarded-host"]} | x-fwd-proto=${req.headers["x-forwarded-proto"]}`);
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
   const healthPaths = new Set(["/", "/healthz"]);
