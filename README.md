@@ -5,7 +5,7 @@ Remote HTTPS MCP wrapper for `@kfastov/tgcli`.
 Production endpoint:
 
 ```text
-https://api.fstr.cc/telegram-private-mcp/mcp
+https://fstr.cc/mcp
 ```
 
 The public `/mcp` endpoint is protected by:
@@ -27,12 +27,12 @@ Codex:
 
 ```bash
 export TELEGRAM_PRIVATE_MCP_TOKEN="..."
-codex mcp add telegram-private --url https://api.fstr.cc/telegram-private-mcp/mcp --bearer-token-env-var TELEGRAM_PRIVATE_MCP_TOKEN
+codex mcp add telegram-private --url https://fstr.cc/mcp --bearer-token-env-var TELEGRAM_PRIVATE_MCP_TOKEN
 ```
 
 Claude Code:
 
 ```bash
-claude mcp add --transport http telegram-private https://api.fstr.cc/telegram-private-mcp/mcp \
+claude mcp add --transport http telegram-private https://fstr.cc/mcp \
   --header "Authorization: Bearer ..."
 ```

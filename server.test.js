@@ -169,6 +169,57 @@ test("registered clients are told to send client_secret when the token endpoint 
   assert.equal(token.body.scope, "mcp");
 });
 
+test("supports Coolify path routing when the public MCP endpoint is the prefix", async (t) => {
+  const app = await startServer({
+    MCP_PUBLIC_PREFIX: "/mcp",
+    MCP_BEARER_TOKEN: "test-token",
+  });
+  t.after(app.stop);
+
+  const forwardedHeaders = {
+    "x-forwarded-host": "fstr.cc",
+    "x-forwarded-proto": "https",
+  };
+
+  const unauthorized = await fetch(`${app.url}/`, {
+    method: "POST",
+    headers: forwardedHeaders,
+  });
+  assert.equal(unauthorized.status, 401);
+  assert.equal(
+    unauthorized.headers.get("www-authenticate"),
+    'Bearer resource_metadata="https://fstr.cc/mcp/.well-known/oauth-protected-resource", scope="mcp"',
+  );
+
+  const resourceMetadata = await getJson(`${app.url}/.well-known/oauth-protected-resource`, {
+    headers: forwardedHeaders,
+  });
+  assert.equal(resourceMetadata.status, 200);
+  assert.equal(resourceMetadata.body.resource, "https://fstr.cc/mcp");
+  assert.deepEqual(resourceMetadata.body.authorization_servers, ["https://fstr.cc/mcp"]);
+
+  const authMetadata = await getJson(`${app.url}/.well-known/oauth-authorization-server`, {
+    headers: forwardedHeaders,
+  });
+  assert.equal(authMetadata.status, 200);
+  assert.equal(authMetadata.body.issuer, "https://fstr.cc/mcp");
+  assert.equal(authMetadata.body.authorization_endpoint, "https://fstr.cc/mcp/oauth/authorize");
+  assert.deepEqual(authMetadata.body.protected_resources, ["https://fstr.cc/mcp"]);
+
+  const authorizeUrl = new URL(`${app.url}/oauth/authorize`);
+  authorizeUrl.search = new URLSearchParams({
+    client_id: "telegram-private-mcp",
+    redirect_uri: "http://127.0.0.1/callback",
+    response_type: "code",
+    code_challenge: "challenge",
+    code_challenge_method: "S256",
+  }).toString();
+
+  const login = await fetch(authorizeUrl, { headers: forwardedHeaders });
+  assert.equal(login.status, 200);
+  assert.match(await login.text(), /action="\/mcp\/oauth\/authorize\?/);
+});
+
 async function getJson(url, init) {
   const response = await fetch(url, init);
   return {

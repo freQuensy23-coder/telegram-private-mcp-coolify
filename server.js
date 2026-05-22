@@ -10,6 +10,7 @@ const tgcliHost = process.env.TGCLI_HOST || "127.0.0.1";
 const tgcliPort = Number(process.env.TGCLI_PORT || 8080);
 const bearerToken = process.env.MCP_BEARER_TOKEN || "";
 const publicPrefix = normalizePrefix(process.env.MCP_PUBLIC_PREFIX || "");
+const mcpAtPublicBase = publicPrefix === "/mcp";
 const oauthClientId = process.env.OAUTH_CLIENT_ID || "";
 const oauthClientSecret = process.env.OAUTH_CLIENT_SECRET || "";
 const authPassword = process.env.MCP_AUTH_PASSWORD || "";
@@ -259,7 +260,7 @@ function getBaseUrl(req) {
 }
 
 function getMcpResourceUrl(req) {
-  return `${getBaseUrl(req)}/mcp`;
+  return mcpAtPublicBase ? getBaseUrl(req) : `${getBaseUrl(req)}/mcp`;
 }
 
 function getProtectedResourceMetadataUrl(req) {
@@ -317,7 +318,7 @@ function oauthProtectedResource(req, res) {
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(
     JSON.stringify({
-      resource: `${base}/mcp`,
+      resource: getMcpResourceUrl(req),
       authorization_servers: [base],
       scopes_supported: ["mcp"],
       bearer_methods_supported: ["header"],
@@ -360,7 +361,7 @@ function oauthAuthorize(req, res) {
       const submittedPassword = params.get("password") || "";
       if (!authPassword || submittedPassword !== authPassword) {
         res.writeHead(401, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(loginForm(url.pathname, url.search, "Неверный пароль"));
+        res.end(loginForm(toExternalPath(url.pathname), url.search, "Неверный пароль"));
         return;
       }
       issueCode({ codeChallenge, codeChallengeMethod, redirectUri, clientId, resource, state }, res);
@@ -370,7 +371,14 @@ function oauthAuthorize(req, res) {
 
   // GET — show login form
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  res.end(loginForm(url.pathname, url.search, ""));
+  res.end(loginForm(toExternalPath(url.pathname), url.search, ""));
+}
+
+function toExternalPath(pathname) {
+  if (!publicPrefix || pathname === publicPrefix || pathname.startsWith(`${publicPrefix}/`)) {
+    return pathname;
+  }
+  return `${publicPrefix}${pathname}`;
 }
 
 function loginForm(actionPath, queryString, error) {
@@ -556,6 +564,9 @@ const server = http.createServer((req, res) => {
     authorizePaths.add(`${publicPrefix}/oauth/authorize`);
     tokenPaths.add(`${publicPrefix}/oauth/token`);
     registerPaths.add(`${publicPrefix}/oauth/register`);
+  }
+  if (mcpAtPublicBase) {
+    mcpPaths.add("/");
   }
 
   if (req.method === "GET" && healthPaths.has(url.pathname)) {
