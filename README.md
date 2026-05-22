@@ -14,6 +14,13 @@ The public `/mcp` endpoint is protected by:
 Authorization: Bearer <MCP_BEARER_TOKEN>
 ```
 
+Claude custom connectors use the same URL through OAuth dynamic registration.
+Leave the advanced OAuth Client ID and OAuth Client Secret fields empty:
+
+```text
+https://fstr.cc/mcp
+```
+
 Telegram data is not baked into the image. The container expects a persistent
 store mounted at `/data` with:
 
