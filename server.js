@@ -21,7 +21,7 @@ let child = null;
 let childReady = false;
 let lastStartAttempt = 0;
 
-// code -> { codeChallenge, codeChallengeMethod, redirectUri, clientId, expiresAt }
+// code -> { codeChallenge, codeChallengeMethod, redirectUri, clientId, resource, expiresAt }
 const pendingCodes = new Map();
 setInterval(() => {
   const now = Date.now();
@@ -179,10 +179,10 @@ function ensureTgcli() {
 }
 
 function unauthorized(req, res) {
-  const base = getBaseUrl(req);
+  const metadataUrl = getProtectedResourceMetadataUrl(req);
   res.writeHead(401, {
     "Content-Type": "application/json",
-    "WWW-Authenticate": `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`,
+    "WWW-Authenticate": `Bearer resource_metadata="${metadataUrl}", scope="mcp"`,
   });
   res.end(JSON.stringify({ error: "unauthorized" }));
 }
@@ -248,14 +248,29 @@ function health(res) {
   );
 }
 
-function getBaseUrl(req) {
+function getOrigin(req) {
   const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost";
   const proto = req.headers["x-forwarded-proto"] || "https";
-  return `${proto}://${host}${publicPrefix}`;
+  return `${proto}://${host}`;
+}
+
+function getBaseUrl(req) {
+  return `${getOrigin(req)}${publicPrefix}`;
+}
+
+function getMcpResourceUrl(req) {
+  return `${getBaseUrl(req)}/mcp`;
+}
+
+function getProtectedResourceMetadataUrl(req) {
+  return `${getOrigin(req)}/.well-known/oauth-protected-resource${publicPrefix}/mcp`;
 }
 
 function oauthMetadata(req, res) {
   const base = getBaseUrl(req);
+  const tokenEndpointAuthMethods = oauthClientSecret
+    ? ["client_secret_post", "client_secret_basic"]
+    : ["none"];
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(
     JSON.stringify({
@@ -263,11 +278,12 @@ function oauthMetadata(req, res) {
       authorization_endpoint: `${base}/oauth/authorize`,
       token_endpoint: `${base}/oauth/token`,
       registration_endpoint: `${base}/oauth/register`,
+      protected_resources: [getMcpResourceUrl(req)],
       scopes_supported: ["mcp"],
       grant_types_supported: ["authorization_code"],
       response_types_supported: ["code"],
       code_challenge_methods_supported: ["S256"],
-      token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
+      token_endpoint_auth_methods_supported: tokenEndpointAuthMethods,
     }),
   );
 }
@@ -280,32 +296,31 @@ function oauthRegister(req, res) {
     let parsed = {};
     try { parsed = JSON.parse(body); } catch (_) {}
     const redirectUris = parsed.redirect_uris || [];
+    const tokenEndpointAuthMethod = oauthClientSecret ? "client_secret_post" : "none";
     console.log(`[oauth/register] redirect_uris=${JSON.stringify(redirectUris)}`);
     res.writeHead(201, { "Content-Type": "application/json" });
     res.end(JSON.stringify({
       client_id: oauthClientId || "telegram-private-mcp",
       client_secret: oauthClientSecret || undefined,
+      client_secret_expires_at: oauthClientSecret ? 0 : undefined,
       client_id_issued_at: Math.floor(Date.now() / 1000),
       grant_types: ["authorization_code"],
       response_types: ["code"],
       redirect_uris: redirectUris,
-      token_endpoint_auth_method: "none",
+      token_endpoint_auth_method: tokenEndpointAuthMethod,
     }));
   });
 }
 
 function oauthProtectedResource(req, res) {
   const base = getBaseUrl(req);
-  const rootBase = (() => {
-    const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost";
-    const proto = req.headers["x-forwarded-proto"] || "https";
-    return `${proto}://${host}`;
-  })();
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(
     JSON.stringify({
       resource: `${base}/mcp`,
-      authorization_servers: [`${rootBase}${publicPrefix}`],
+      authorization_servers: [base],
+      scopes_supported: ["mcp"],
+      bearer_methods_supported: ["header"],
     }),
   );
 }
@@ -318,6 +333,7 @@ function oauthAuthorize(req, res) {
   const codeChallenge = url.searchParams.get("code_challenge");
   const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "S256";
   const responseType = url.searchParams.get("response_type");
+  const resource = url.searchParams.get("resource");
   console.log(`[oauth/authorize] client_id=${clientId} redirect_uri=${redirectUri} response_type=${responseType} state=${state?.slice(0,16)}`);
 
   if (oauthClientId && clientId !== oauthClientId) {
@@ -326,6 +342,11 @@ function oauthAuthorize(req, res) {
     return;
   }
   if (!redirectUri || responseType !== "code") {
+    res.writeHead(400, { "Content-Type": "text/html" });
+    res.end("<h1>Error: invalid_request</h1>");
+    return;
+  }
+  if (!codeChallenge || codeChallengeMethod !== "S256") {
     res.writeHead(400, { "Content-Type": "text/html" });
     res.end("<h1>Error: invalid_request</h1>");
     return;
@@ -339,20 +360,20 @@ function oauthAuthorize(req, res) {
       const submittedPassword = params.get("password") || "";
       if (!authPassword || submittedPassword !== authPassword) {
         res.writeHead(401, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(loginForm(url.search, "Неверный пароль"));
+        res.end(loginForm(url.pathname, url.search, "Неверный пароль"));
         return;
       }
-      issueCode({ codeChallenge, codeChallengeMethod, redirectUri, clientId, state }, res);
+      issueCode({ codeChallenge, codeChallengeMethod, redirectUri, clientId, resource, state }, res);
     });
     return;
   }
 
   // GET — show login form
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-  res.end(loginForm(url.search, ""));
+  res.end(loginForm(url.pathname, url.search, ""));
 }
 
-function loginForm(queryString, error) {
+function loginForm(actionPath, queryString, error) {
   return `<!DOCTYPE html>
 <html lang="ru">
 <head><meta charset="utf-8"><title>Telegram MCP — вход</title>
@@ -365,21 +386,32 @@ function loginForm(queryString, error) {
   button:hover { background: #1d4ed8; }
   .err { color: #f87171; margin-bottom: .8rem; font-size: .9rem; }
 </style></head>
-<body><form method="POST" action="/oauth/authorize${queryString}">
+<body><form method="POST" action="${escapeHtml(actionPath)}${escapeHtml(queryString)}">
   <h2>Telegram MCP</h2>
-  ${error ? `<div class="err">${error}</div>` : ""}
+  ${error ? `<div class="err">${escapeHtml(error)}</div>` : ""}
   <input type="password" name="password" placeholder="Пароль" autofocus autocomplete="current-password">
   <button type="submit">Войти</button>
 </form></body></html>`;
 }
 
-function issueCode({ codeChallenge, codeChallengeMethod, redirectUri, clientId, state }, res) {
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[char]);
+}
+
+function issueCode({ codeChallenge, codeChallengeMethod, redirectUri, clientId, resource, state }, res) {
   const code = randomBytes(32).toString("base64url");
   pendingCodes.set(code, {
     codeChallenge,
     codeChallengeMethod,
     redirectUri,
     clientId,
+    resource,
     expiresAt: Date.now() + 300_000,
   });
   const redirect = new URL(redirectUri);
@@ -399,8 +431,11 @@ function oauthToken(req, res) {
     const grantType = params.get("grant_type");
     const code = params.get("code");
     const codeVerifier = params.get("code_verifier");
-    const clientId = params.get("client_id");
-    const clientSecret = params.get("client_secret");
+    const tokenClient = getTokenClientCredentials(req, params);
+    const clientId = tokenClient.clientId;
+    const clientSecret = tokenClient.clientSecret;
+    const redirectUri = params.get("redirect_uri");
+    const resource = params.get("resource");
 
     if (grantType !== "authorization_code") {
       res.writeHead(400, { "Content-Type": "application/json" });
@@ -428,16 +463,29 @@ function oauthToken(req, res) {
       return;
     }
 
-    if (pending.codeChallenge && codeVerifier) {
-      if (
-        pending.codeChallengeMethod === "S256" &&
-        createHash("sha256").update(codeVerifier).digest("base64url") !== pending.codeChallenge
-      ) {
-        pendingCodes.delete(code);
-        res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed" }));
-        return;
-      }
+    if (redirectUri && redirectUri !== pending.redirectUri) {
+      pendingCodes.delete(code);
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_grant", error_description: "redirect_uri mismatch" }));
+      return;
+    }
+
+    if (pending.resource && resource && resource !== pending.resource) {
+      pendingCodes.delete(code);
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_target", error_description: "resource mismatch" }));
+      return;
+    }
+
+    if (
+      !codeVerifier ||
+      pending.codeChallengeMethod !== "S256" ||
+      createHash("sha256").update(codeVerifier).digest("base64url") !== pending.codeChallenge
+    ) {
+      pendingCodes.delete(code);
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed" }));
+      return;
     }
 
     pendingCodes.delete(code);
@@ -447,9 +495,38 @@ function oauthToken(req, res) {
         access_token: bearerToken,
         token_type: "Bearer",
         expires_in: 2592000,
+        scope: "mcp",
       }),
     );
   });
+}
+
+function getTokenClientCredentials(req, params) {
+  const header = req.headers.authorization || "";
+  if (!header.startsWith("Basic ")) {
+    return {
+      clientId: params.get("client_id"),
+      clientSecret: params.get("client_secret"),
+    };
+  }
+
+  try {
+    const decoded = Buffer.from(header.slice("Basic ".length), "base64").toString("utf8");
+    const separator = decoded.indexOf(":");
+    if (separator === -1) {
+      return { clientId: null, clientSecret: null };
+    }
+    return {
+      clientId: decodeFormComponent(decoded.slice(0, separator)),
+      clientSecret: decodeFormComponent(decoded.slice(separator + 1)),
+    };
+  } catch (_) {
+    return { clientId: null, clientSecret: null };
+  }
+}
+
+function decodeFormComponent(value) {
+  return decodeURIComponent(value.replace(/\+/g, " "));
 }
 
 const server = http.createServer((req, res) => {
@@ -459,7 +536,10 @@ const server = http.createServer((req, res) => {
   const healthPaths = new Set(["/", "/healthz"]);
   const mcpPaths = new Set(["/mcp"]);
   const wellKnownPaths = new Set(["/.well-known/oauth-authorization-server"]);
-  const protectedResourcePaths = new Set(["/.well-known/oauth-protected-resource"]);
+  const protectedResourcePaths = new Set([
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/mcp",
+  ]);
   const authorizePaths = new Set(["/oauth/authorize"]);
   const tokenPaths = new Set(["/oauth/token"]);
   const registerPaths = new Set(["/oauth/register"]);
@@ -469,7 +549,9 @@ const server = http.createServer((req, res) => {
     healthPaths.add(`${publicPrefix}/`);
     healthPaths.add(`${publicPrefix}/healthz`);
     mcpPaths.add(`${publicPrefix}/mcp`);
+    wellKnownPaths.add(`/.well-known/oauth-authorization-server${publicPrefix}`);
     wellKnownPaths.add(`${publicPrefix}/.well-known/oauth-authorization-server`);
+    protectedResourcePaths.add(`/.well-known/oauth-protected-resource${publicPrefix}/mcp`);
     protectedResourcePaths.add(`${publicPrefix}/.well-known/oauth-protected-resource`);
     authorizePaths.add(`${publicPrefix}/oauth/authorize`);
     tokenPaths.add(`${publicPrefix}/oauth/token`);
