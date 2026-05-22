@@ -573,6 +573,13 @@ const server = http.createServer((req, res) => {
     mcpPaths.add("/");
   }
 
+  const acceptsEventStream = (req.headers.accept || "").includes("text/event-stream");
+  if (req.method === "GET" && acceptsEventStream && mcpPaths.has(url.pathname)) {
+    if (!requireBearer(req, res)) return;
+    proxyToTgcli(req, res, `/mcp${url.search}`);
+    return;
+  }
+
   if (req.method === "GET" && healthPaths.has(url.pathname)) {
     health(res);
     return;

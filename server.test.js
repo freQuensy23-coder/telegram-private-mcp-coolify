@@ -191,6 +191,22 @@ test("supports Coolify path routing when the public MCP endpoint is the prefix",
     'Bearer resource_metadata="https://fstr.cc/mcp/.well-known/oauth-protected-resource", scope="mcp"',
   );
 
+  const health = await getJson(`${app.url}/`, { headers: forwardedHeaders });
+  assert.equal(health.status, 200);
+  assert.equal(health.body.status, "ok");
+
+  const sseWithoutAuth = await fetch(`${app.url}/`, {
+    headers: {
+      ...forwardedHeaders,
+      accept: "text/event-stream",
+    },
+  });
+  assert.equal(sseWithoutAuth.status, 401);
+  assert.equal(
+    sseWithoutAuth.headers.get("www-authenticate"),
+    'Bearer resource_metadata="https://fstr.cc/mcp/.well-known/oauth-protected-resource", scope="mcp"',
+  );
+
   const resourceMetadata = await getJson(`${app.url}/.well-known/oauth-protected-resource`, {
     headers: forwardedHeaders,
   });
